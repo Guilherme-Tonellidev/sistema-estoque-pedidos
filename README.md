@@ -141,6 +141,17 @@ O Flyway aplica as migrações pendentes na inicialização. O Hibernate valida 
 
 Para encerrar a aplicação, pressione `Ctrl + C` no terminal em que ela está executando.
 
+## Documentação interativa
+
+Com a aplicação em execução, acesse:
+
+- [Swagger UI](http://localhost:8081/swagger-ui.html): documentação e execução de requisições pelo navegador.
+- [OpenAPI JSON](http://localhost:8081/v3/api-docs): especificação da API.
+
+Para testar uma rota, abra a operação, clique em **Try it out**, preencha os campos necessários e clique em **Execute**.
+
+As operações executadas pelo Swagger utilizam o banco configurado na aplicação. Cadastros e movimentações válidos alteram os dados.
+
 ## Endpoints
 
 | Método | Rota | Operação |
@@ -294,7 +305,6 @@ A versão atual disponibiliza uma API de produtos e estoque, com entradas, saíd
 
 Próximas etapas:
 
-- Documentação interativa da API com OpenAPI e Swagger UI.
 - Módulo de pedidos e itens.
 - Confirmação e cancelamento de pedidos com atualização do estoque.
 - Autenticação e controle de acesso.
