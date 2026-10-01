@@ -1,107 +1,52 @@
 # API de Estoque e Pedidos
 
-Projeto de portfólio com foco em **desenvolvimento back-end**, desenvolvido por **Guilherme Tonelli** com Java, Spring Boot e PostgreSQL.
+API REST de portfólio desenvolvida com **Java, Spring Boot e PostgreSQL**. Permite gerenciar produtos, movimentar estoque e criar, confirmar e cancelar pedidos.
 
-A API permite cadastrar produtos e controlar entradas e saídas de estoque com histórico. O projeto explora validação de dados, regras de negócio, transações, persistência e testes automatizados.
-
-O módulo de pedidos será implementado nas próximas etapas. O escopo deste repositório é a API, sem uma interface própria de front-end.
+Projeto focado em **back-end**, com documentação interativa pelo Swagger UI.
 
 ## Tecnologias
 
-- Java 21
-- Spring Boot 4.1.1
-- Spring Web MVC
-- Spring Data JPA
-- Jakarta Validation
-- PostgreSQL 17
-- Flyway
-- Maven Wrapper
-- JUnit 5
-- Git e GitHub
+Java 21 · Spring Boot 4.1.1 · Spring Data JPA · Jakarta Validation · PostgreSQL 17 · Flyway · springdoc-openapi 3.1.1 · Maven Wrapper · JUnit 5.
 
-## Funcionalidades implementadas
+## Funcionalidades e regras
 
-- Cadastro de produtos com código, nome, preço e estoque mínimo.
-- Normalização do código para maiúsculas e remoção de espaços nas extremidades.
-- Bloqueio de códigos duplicados.
-- Listagem de produtos por ID crescente.
-- Consulta de produto por ID.
-- Entrada de estoque com quantidade e motivo.
-- Saída de estoque com quantidade e motivo.
-- Bloqueio de retiradas acima do saldo disponível.
-- Histórico das 50 movimentações mais recentes de cada produto.
-- Registro de data, quantidade e saldos anterior e posterior.
-- Respostas de erro padronizadas.
+- **Produtos:** cadastro e consulta, código único normalizado para maiúsculas, preço e estoque mínimo não negativos. Estoque inicial zero.
+- **Estoque:** entradas e saídas com quantidade positiva e motivo obrigatório. Retiradas acima do saldo são recusadas.
+- **Histórico:** últimas 50 movimentações de cada produto, com quantidade, motivo, data e saldos anterior e posterior.
+- **Pedidos:** de 1 a 100 produtos diferentes, quantidades positivas e preços copiados do cadastro na criação. Subtotais e total calculados com `BigDecimal`.
+- **Consistência:** saldo, histórico e mudança de status são gravados na mesma transação. As operações de confirmação e cancelamento utilizam bloqueios no pedido e nos produtos.
 
-## Regras de negócio
+### Fluxo dos pedidos
 
-### Produtos
-
-- Todo produto começa com estoque zero.
-- O código é obrigatório, único e possui até 50 caracteres.
-- O nome é obrigatório e possui até 120 caracteres.
-- O preço não pode ser negativo.
-- O preço admite até 10 dígitos inteiros e 2 casas decimais.
-- O estoque mínimo é obrigatório e não pode ser negativo.
-
-### Movimentações de estoque
-
-- A quantidade movimentada deve ser maior que zero.
-- O motivo é obrigatório e possui até 255 caracteres.
-- Uma saída pode zerar o estoque, mas não deixá-lo negativo.
-- Entradas que ultrapassem o limite de um inteiro de 32 bits são recusadas.
-- Movimentações recusadas não devem alterar o saldo nem gerar histórico.
-
-A atualização do saldo e a gravação do histórico acontecem na mesma transação. A consulta usada para movimentar o estoque aplica bloqueio de escrita no produto, coordenando operações simultâneas sobre o mesmo item.
-
-O banco também possui restrições para proteger os valores e a coerência entre os saldos registrados no histórico.
-
-## Organização do código
-
-Os arquivos Java utilizam o pacote `sistema_estoque_pedidos`.
-
-| Componente | Responsabilidade |
+| Operação | Resultado |
 |---|---|
-| Controllers | Disponibilizar os endpoints da API |
-| Services | Coordenar as operações e transações |
-| Repositories | Acessar os dados persistidos |
-| Entidades | Representar produtos e movimentações |
-| Requests | Definir e validar os dados recebidos |
-| Tratador de erros | Padronizar as respostas dos erros tratados |
-| Migrações Flyway | Controlar a evolução da estrutura do banco |
-| Testes | Verificar as regras de saldo do produto |
+| Criar | Gera um `RASCUNHO`, sem reservar ou descontar estoque |
+| Confirmar | Valida todos os saldos, registra as saídas e muda para `CONFIRMADO` |
+| Cancelar rascunho | Muda para `CANCELADO`, sem movimentar estoque |
+| Cancelar confirmado | Devolve as quantidades, registra as entradas e muda para `CANCELADO` |
 
-## Executando localmente
+Confirmações e cancelamentos repetidos são recusados. Pedidos cancelados não podem ser confirmados. O cancelamento preserva os itens, os preços e a data de confirmação, quando existente.
 
-### Pré-requisitos
+## Como executar
 
-- JDK compatível com Java 21.
-- PostgreSQL instalado e em execução.
-- Git.
-- Acesso à internet para baixar as dependências na primeira execução.
+Requisitos: **JDK compatível com Java 21, PostgreSQL em execução e Git**. O Maven Wrapper está incluído. Os comandos abaixo usam PowerShell no Windows.
 
-O projeto inclui Maven Wrapper, portanto não exige uma instalação separada do Maven.
-
-Os comandos abaixo são para PowerShell no Windows.
-
-### 1. Clonar o repositório
+### 1. Clonar
 
 ```powershell
 git clone https://github.com/Guilherme-Tonellidev/sistema-estoque-pedidos.git
 cd sistema-estoque-pedidos
 ```
 
-### 2. Preparar o PostgreSQL
+### 2. Criar o banco
 
-Para uma instalação nova, conecte-se pelo SQL Shell (`psql`) com um usuário administrador.
-
-Crie o usuário da aplicação:
+No SQL Shell (`psql`), conectado como administrador, execute uma vez:
 
 ```sql
 CREATE ROLE estoque_app LOGIN;
 ```
 
-Defina a senha pelo comando do `psql`:
+Defina a senha:
 
 ```text
 \password estoque_app
@@ -113,9 +58,9 @@ Crie o banco:
 CREATE DATABASE estoque_db OWNER estoque_app;
 ```
 
-Essa preparação é feita apenas uma vez. Se o usuário e o banco já existirem, utilize-os.
+Se o usuário e o banco já existirem, pule essa etapa.
 
-### 3. Informar a senha e iniciar
+### 3. Iniciar a API
 
 No PowerShell, dentro da pasta do projeto:
 
@@ -125,36 +70,20 @@ $env:ESTOQUE_DB_PASSWORD = [System.Net.NetworkCredential]::new("", $senhaEstoque
 .\mvnw.cmd spring-boot:run
 ```
 
-A senha é fornecida por variável de ambiente e não deve ser gravada no repositório. Ao abrir outro terminal, informe-a novamente antes de iniciar a aplicação.
+A aplicação usa PostgreSQL em `localhost:5432`, banco `estoque_db` e usuário `estoque_app`. A senha fica na variável de ambiente do terminal; informe-a novamente ao abrir outro terminal.
 
-### Configuração local
+O Flyway aplica as migrações automaticamente, e o Hibernate valida as tabelas. Encerre a aplicação com `Ctrl + C`.
 
-| Item | Valor |
-|---|---|
-| URL da API | `http://localhost:8081` |
-| Endereço do PostgreSQL | `localhost:5432` |
-| Banco | `estoque_db` |
-| Usuário | `estoque_app` |
-| Variável da senha | `ESTOQUE_DB_PASSWORD` |
+## Documentação e endpoints
 
-O Flyway aplica as migrações pendentes na inicialização. O Hibernate valida a estrutura das tabelas com `ddl-auto=validate`.
+Com a aplicação rodando:
 
-Para encerrar a aplicação, pressione `Ctrl + C` no terminal em que ela está executando.
-
-## Documentação interativa
-
-Com a aplicação em execução, acesse:
-
-- [Swagger UI](http://localhost:8081/swagger-ui.html): documentação e execução de requisições pelo navegador.
+- [Swagger UI](http://localhost:8081/swagger-ui.html): visualizar e testar as rotas.
 - [OpenAPI JSON](http://localhost:8081/v3/api-docs): especificação da API.
 
-Para testar uma rota, abra a operação, clique em **Try it out**, preencha os campos necessários e clique em **Execute**.
+No Swagger, selecione a operação, clique em **Try it out**, preencha os campos e clique em **Execute**. As operações alteram o banco real da aplicação.
 
-As operações executadas pelo Swagger utilizam o banco configurado na aplicação. Cadastros e movimentações válidos alteram os dados.
-
-## Endpoints
-
-| Método | Rota | Operação |
+| Método | Rota | Função |
 |---|---|---|
 | POST | `/produtos` | Cadastrar produto |
 | GET | `/produtos` | Listar produtos |
@@ -162,12 +91,17 @@ As operações executadas pelo Swagger utilizam o banco configurado na aplicaç�
 | POST | `/produtos/{produtoId}/entradas` | Registrar entrada |
 | POST | `/produtos/{produtoId}/saidas` | Registrar saída |
 | GET | `/produtos/{produtoId}/movimentacoes` | Consultar histórico recente |
+| POST | `/pedidos` | Criar pedido em rascunho |
+| GET | `/pedidos` | Listar pedidos |
+| GET | `/pedidos/{id}` | Consultar pedido |
+| PATCH | `/pedidos/{id}/confirmacao` | Confirmar e descontar estoque |
+| PATCH | `/pedidos/{id}/cancelamento` | Cancelar e devolver estoque, se confirmado |
 
-As requisições de cadastro e movimentação utilizam `Content-Type: application/json`.
+Cadastros e movimentações recebem JSON. Confirmação e cancelamento não exigem corpo de requisição.
 
-### Cadastro de produto
+### Exemplos de requisição
 
-Envie para `POST /produtos`:
+**Produto — `POST /produtos`:**
 
 ```json
 {
@@ -178,11 +112,7 @@ Envie para `POST /produtos`:
 }
 ```
 
-O estoque inicial será zero. Utilize o ID retornado nas próximas operações.
-
-### Entrada de estoque
-
-Exemplo para um produto de ID `1`, usando `POST /produtos/1/entradas`:
+**Entrada — `POST /produtos/{produtoId}/entradas`:**
 
 ```json
 {
@@ -191,134 +121,86 @@ Exemplo para um produto de ID `1`, usando `POST /produtos/1/entradas`:
 }
 ```
 
-### Saída de estoque
+A saída utiliza os mesmos campos na rota `/produtos/{produtoId}/saidas`. Cada envio válido registra uma nova movimentação.
 
-Exemplo usando `POST /produtos/1/saidas`:
+**Pedido — `POST /pedidos`:**
 
 ```json
 {
-  "quantidade": 3,
-  "motivo": "Retirada para uso interno"
+  "cliente": "Cliente de teste",
+  "itens": [
+    {
+      "produtoId": 1,
+      "quantidade": 2
+    }
+  ]
 }
 ```
 
-Cada envio válido de uma movimentação cria um novo registro e altera o saldo. Repetir uma requisição não é tratado como a mesma operação.
+Use o ID real do produto cadastrado. O preço é obtido no banco; não é enviado pelo cliente da API.
 
-### Histórico
+### Respostas
 
-Consulte `GET /produtos/1/movimentacoes` para obter as movimentações recentes do produto de ID `1`.
-
-Cada registro contém:
-
-- ID da movimentação.
-- ID do produto.
-- Tipo: `ENTRADA` ou `SAIDA`.
-- Quantidade movimentada.
-- Saldo anterior.
-- Saldo posterior.
-- Motivo.
-- Data e hora.
-
-A consulta retorna até 50 registros, ordenados por data decrescente e, em caso de empate, por ID decrescente.
-
-## Respostas da API
-
-| Status | Significado |
+| Status | Situação |
 |---|---|
-| `200 OK` | Consulta realizada |
-| `201 Created` | Produto ou movimentação criado |
-| `400 Bad Request` | Dados inválidos |
-| `404 Not Found` | Produto não encontrado |
-| `409 Conflict` | Código duplicado ou estoque insuficiente |
+| `200` | Consulta, confirmação ou cancelamento realizado |
+| `201` | Produto, pedido ou movimentação criado |
+| `400` | Dados inválidos |
+| `404` | Produto ou pedido não encontrado |
+| `409` | Código duplicado, saldo insuficiente, transição de status inválida ou devolução acima do limite de estoque |
 
-Os erros tratados pela aplicação utilizam os campos `status`, `erro` e `caminho`.
-
-Exemplo de saldo insuficiente:
+Os erros tratados seguem este formato:
 
 ```json
 {
   "status": 409,
-  "erro": "Estoque insuficiente. Saldo disponível: 7.",
-  "caminho": "/produtos/1/saidas"
+  "erro": "O pedido já está cancelado.",
+  "caminho": "/pedidos/1/cancelamento"
 }
 ```
 
-Exemplo de quantidade inválida:
+## Banco e organização
 
-```json
-{
-  "status": 400,
-  "erro": "A quantidade deve ser maior que zero.",
-  "caminho": "/produtos/1/entradas"
-}
-```
+O código é dividido em controllers, services, repositories, entidades e objetos de requisição e resposta.
 
-## Migrações do banco
+As migrações ficam em `src/main/resources/db/migration`:
 
-| Migração | Finalidade |
+| Versão | Estrutura |
 |---|---|
-| `V1__criar_tabela_produtos.sql` | Criar a tabela de produtos e suas restrições |
-| `V2__criar_movimentacoes_estoque.sql` | Criar o histórico de movimentações, suas restrições e índice |
+| V1 | Produtos |
+| V2 | Movimentações de estoque |
+| V3 | Pedidos e itens |
 
-Os arquivos ficam em `src/main/resources/db/migration`.
+Migrações já aplicadas devem ser preservadas. Alterações no banco recebem uma nova versão.
 
-Migrações já aplicadas devem ser preservadas. Mudanças posteriores no banco devem receber novos arquivos de migração.
+## Testes
 
-## Testes automatizados
+**19 testes unitários aprovados:**
 
-A classe `ProdutoTest` possui **9 casos de teste** cobrindo:
-
-- Soma de entradas ao estoque existente.
-- Desconto de uma saída.
-- Retirada de todo o saldo.
-- Recusa de saída acima do saldo.
-- Recusa de entradas com quantidade zero ou negativa.
-- Recusa de saídas com quantidade zero ou negativa.
-- Recusa de entrada acima do limite suportado.
-- Preservação do saldo nas operações recusadas.
+- `ProdutoTest`: 9 casos sobre entradas, saídas, saldo insuficiente, quantidades inválidas e limite de estoque.
+- `PedidoTest`: 10 casos sobre totais, confirmação, cancelamento, operações repetidas e restrições de itens.
 
 Execute:
 
 ```powershell
-.\mvnw.cmd "-Dtest=ProdutoTest" test
+.\mvnw.cmd "-Dtest=ProdutoTest,PedidoTest" test
 ```
 
-Esses testes não iniciam o Spring, não dependem do PostgreSQL e não alteram os dados da aplicação.
+Esses testes não dependem do PostgreSQL. O comando executa apenas as duas classes; a suíte completa ainda não foi validada para rodar sem banco.
 
-O comando executa somente `ProdutoTest`. A suíte completa do projeto ainda não foi validada para execução independente do banco.
+Os fluxos da API foram verificados manualmente, incluindo preservação do saldo e histórico em operações recusadas. Testes automatizados de integração e concorrência ainda estão pendentes.
 
-### Verificações manuais realizadas
+## Próximas etapas
 
-- Cadastro e consulta de produto.
-- Recusa de código duplicado com status `409`.
-- Recusa de preço negativo com status `400`.
-- Entrada de estoque com atualização de saldo e histórico.
-- Recusa de entrada com quantidade zero, preservando saldo e histórico.
-- Saída de estoque com atualização de saldo e histórico.
-- Recusa de saída acima do saldo com status `409`, preservando saldo e histórico.
-
-A persistência, o histórico e as operações simultâneas ainda não possuem cobertura automatizada de integração.
-
-## Estado atual e próximas etapas
-
-A versão atual disponibiliza uma API de produtos e estoque, com entradas, saídas, histórico de movimentações e testes unitários das regras de saldo.
-
-Próximas etapas:
-
-- Módulo de pedidos e itens.
-- Confirmação e cancelamento de pedidos com atualização do estoque.
 - Autenticação e controle de acesso.
-- Consulta de produtos com estoque baixo.
-- Paginação da listagem de produtos e do histórico completo.
-- Testes automatizados de integração, incluindo concorrência e consistência entre saldo e histórico.
-- Execução de testes pelo GitHub Actions.
-- Publicação da API em um ambiente de hospedagem.
-
-O desenvolvimento de uma interface front-end está fora do escopo deste projeto.
+- Consulta de estoque baixo e paginação das listagens.
+- Testes de integração, concorrência e falhas durante transações.
+- Integração contínua com GitHub Actions.
+- Publicação da API.
 
 ## Autor
 
 **Guilherme Tonelli**
 
-- [GitHub](https://github.com/Guilherme-Tonellidev)
-- [LinkedIn](https://www.linkedin.com/in/guilherme-tonellidev)
+[GitHub](https://github.com/Guilherme-Tonellidev) 
+[LinkedIn](https://www.linkedin.com/in/guilherme-tonellidev)
