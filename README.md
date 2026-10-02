@@ -1,44 +1,35 @@
 # API de Estoque e Pedidos
 
-API REST de portfólio desenvolvida com **Java, Spring Boot e PostgreSQL**. Permite gerenciar produtos, movimentar estoque e criar, confirmar e cancelar pedidos.
-
-Projeto focado em **back-end**, com documentação interativa pelo Swagger UI.
+API REST de portfólio para cadastrar produtos, controlar estoque e gerenciar pedidos. Desenvolvida por **Guilherme Tonelli**, com foco em back-end e um menu PowerShell para utilizar a API pelo terminal.
 
 ## Tecnologias
 
-Java 21 · Spring Boot 4.1.1 · Spring Data JPA · Jakarta Validation · PostgreSQL 17 · Flyway · springdoc-openapi 3.1.1 · Maven Wrapper · JUnit 5.
+Java 21 · Spring Boot · Spring Data JPA · Jakarta Validation · PostgreSQL 17 · Flyway · Swagger/OpenAPI · Maven Wrapper · JUnit 5
 
-## Funcionalidades e regras
+## Funcionalidades
 
-- **Produtos:** cadastro e consulta, código único normalizado para maiúsculas, preço e estoque mínimo não negativos. Estoque inicial zero.
-- **Estoque:** entradas e saídas com quantidade positiva e motivo obrigatório. Retiradas acima do saldo são recusadas.
-- **Histórico:** últimas 50 movimentações de cada produto, com quantidade, motivo, data e saldos anterior e posterior.
-- **Pedidos:** de 1 a 100 produtos diferentes, quantidades positivas e preços copiados do cadastro na criação. Subtotais e total calculados com `BigDecimal`.
-- **Consistência:** saldo, histórico e mudança de status são gravados na mesma transação. As operações de confirmação e cancelamento utilizam bloqueios no pedido e nos produtos.
+- Cadastro e consulta de produtos com código único, preço e estoque mínimo.
+- Entradas e saídas com motivo e histórico dos 50 registros mais recentes.
+- Bloqueio de quantidades inválidas e estoque insuficiente.
+- Pedidos com itens, preços registrados e total calculado.
+- Confirmação e cancelamento com atualização do estoque.
 
-### Fluxo dos pedidos
+Produtos começam com estoque zero. Pedidos começam em `RASCUNHO`; a confirmação desconta os itens do estoque. Cancelar um pedido confirmado devolve os itens; cancelar um rascunho não altera o saldo. Confirmações e cancelamentos repetidos são recusados.
 
-| Operação | Resultado |
-|---|---|
-| Criar | Gera um `RASCUNHO`, sem reservar ou descontar estoque |
-| Confirmar | Valida todos os saldos, registra as saídas e muda para `CONFIRMADO` |
-| Cancelar rascunho | Muda para `CANCELADO`, sem movimentar estoque |
-| Cancelar confirmado | Devolve as quantidades, registra as entradas e muda para `CANCELADO` |
+As alterações de pedido, saldo e histórico são realizadas em transações.
 
-Confirmações e cancelamentos repetidos são recusados. Pedidos cancelados não podem ser confirmados. O cancelamento preserva os itens, os preços e a data de confirmação, quando existente.
+## Executar
 
-## Como executar
+Requisitos: **JDK 21**, **PostgreSQL em execução** e **Git**. Os comandos são para PowerShell no Windows.
 
-Requisitos: **JDK compatível com Java 21, PostgreSQL em execução e Git**. O Maven Wrapper está incluído. Os comandos abaixo usam PowerShell no Windows.
-
-### 1. Clonar
+### 1. Clonar o projeto
 
 ```powershell
 git clone https://github.com/Guilherme-Tonellidev/sistema-estoque-pedidos.git
 cd sistema-estoque-pedidos
 ```
 
-### 2. Criar o banco
+### 2. Preparar os bancos
 
 No SQL Shell (`psql`), conectado como administrador, execute uma vez:
 
@@ -52,17 +43,18 @@ Defina a senha:
 \password estoque_app
 ```
 
-Crie o banco:
+Crie os bancos da aplicação e dos testes:
 
 ```sql
 CREATE DATABASE estoque_db OWNER estoque_app;
+CREATE DATABASE estoque_test_db OWNER estoque_app;
 ```
 
-Se o usuário e o banco já existirem, pule essa etapa.
+Se já existirem, utilize-os. A configuração considera o PostgreSQL em `localhost:5432`. O Flyway cria as tabelas automaticamente.
 
 ### 3. Iniciar a API
 
-No PowerShell, dentro da pasta do projeto:
+Dentro da pasta do projeto:
 
 ```powershell
 $senhaEstoque = Read-Host "Senha do estoque_app" -AsSecureString
@@ -70,137 +62,52 @@ $env:ESTOQUE_DB_PASSWORD = [System.Net.NetworkCredential]::new("", $senhaEstoque
 .\mvnw.cmd spring-boot:run
 ```
 
-A aplicação usa PostgreSQL em `localhost:5432`, banco `estoque_db` e usuário `estoque_app`. A senha fica na variável de ambiente do terminal; informe-a novamente ao abrir outro terminal.
+A API fica disponível em `http://localhost:8081`. Informe a senha novamente ao abrir outro terminal; não a salve no repositório. Para encerrar a API, use `Ctrl + C`.
 
-O Flyway aplica as migrações automaticamente, e o Hibernate valida as tabelas. Encerre a aplicação com `Ctrl + C`.
+## Usar a aplicação
 
-## Documentação e endpoints
+**Menu:** com a API ligada, abra outro PowerShell na pasta do projeto e execute:
 
-Com a aplicação rodando:
-
-- [Swagger UI](http://localhost:8081/swagger-ui.html): visualizar e testar as rotas.
-- [OpenAPI JSON](http://localhost:8081/v3/api-docs): especificação da API.
-
-No Swagger, selecione a operação, clique em **Try it out**, preencha os campos e clique em **Execute**. As operações alteram o banco real da aplicação.
-
-| Método | Rota | Função |
-|---|---|---|
-| POST | `/produtos` | Cadastrar produto |
-| GET | `/produtos` | Listar produtos |
-| GET | `/produtos/{id}` | Consultar produto |
-| POST | `/produtos/{produtoId}/entradas` | Registrar entrada |
-| POST | `/produtos/{produtoId}/saidas` | Registrar saída |
-| GET | `/produtos/{produtoId}/movimentacoes` | Consultar histórico recente |
-| POST | `/pedidos` | Criar pedido em rascunho |
-| GET | `/pedidos` | Listar pedidos |
-| GET | `/pedidos/{id}` | Consultar pedido |
-| PATCH | `/pedidos/{id}/confirmacao` | Confirmar e descontar estoque |
-| PATCH | `/pedidos/{id}/cancelamento` | Cancelar e devolver estoque, se confirmado |
-
-Cadastros e movimentações recebem JSON. Confirmação e cancelamento não exigem corpo de requisição.
-
-### Exemplos de requisição
-
-**Produto — `POST /produtos`:**
-
-```json
-{
-  "codigo": "MOUSE-001",
-  "nome": "Mouse USB",
-  "preco": 49.90,
-  "estoqueMinimo": 5
-}
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\menu.ps1
 ```
 
-**Entrada — `POST /produtos/{produtoId}/entradas`:**
+Escolha uma opção para cadastrar produtos, registrar entradas e saídas, criar, confirmar ou cancelar pedidos e consultar os dados. As operações ficam salvas no banco da aplicação. O cancelamento de pedidos não desfaz saídas manuais.
 
-```json
-{
-  "quantidade": 10,
-  "motivo": "Recebimento inicial"
-}
-```
-
-A saída utiliza os mesmos campos na rota `/produtos/{produtoId}/saidas`. Cada envio válido registra uma nova movimentação.
-
-**Pedido — `POST /pedidos`:**
-
-```json
-{
-  "cliente": "Cliente de teste",
-  "itens": [
-    {
-      "produtoId": 1,
-      "quantidade": 2
-    }
-  ]
-}
-```
-
-Use o ID real do produto cadastrado. O preço é obtido no banco; não é enviado pelo cliente da API.
-
-### Respostas
-
-| Status | Situação |
-|---|---|
-| `200` | Consulta, confirmação ou cancelamento realizado |
-| `201` | Produto, pedido ou movimentação criado |
-| `400` | Dados inválidos |
-| `404` | Produto ou pedido não encontrado |
-| `409` | Código duplicado, saldo insuficiente, transição de status inválida ou devolução acima do limite de estoque |
-
-Os erros tratados seguem este formato:
-
-```json
-{
-  "status": 409,
-  "erro": "O pedido já está cancelado.",
-  "caminho": "/pedidos/1/cancelamento"
-}
-```
-
-## Banco e organização
-
-O código é dividido em controllers, services, repositories, entidades e objetos de requisição e resposta.
-
-As migrações ficam em `src/main/resources/db/migration`:
-
-| Versão | Estrutura |
-|---|---|
-| V1 | Produtos |
-| V2 | Movimentações de estoque |
-| V3 | Pedidos e itens |
-
-Migrações já aplicadas devem ser preservadas. Alterações no banco recebem uma nova versão.
+**Swagger:** acesse a [documentação interativa](http://localhost:8081/swagger-ui.html) para consultar os endpoints e enviar requisições. Selecione uma operação, clique em **Try it out** e depois em **Execute**.
 
 ## Testes
 
-**19 testes unitários aprovados:**
+A suíte possui **24 testes aprovados localmente**:
 
-- `ProdutoTest`: 9 casos sobre entradas, saídas, saldo insuficiente, quantidades inválidas e limite de estoque.
-- `PedidoTest`: 10 casos sobre totais, confirmação, cancelamento, operações repetidas e restrições de itens.
+- **19 unitários:** regras de produtos e pedidos.
+- **4 de integração:** confirmação, estoque insuficiente, devolução e cancelamento repetido.
+- **1 de inicialização:** contexto Spring.
 
-Execute:
+Com o PostgreSQL ligado e a variável `ESTOQUE_DB_PASSWORD` definida no terminal:
+
+```powershell
+.\mvnw.cmd test
+```
+
+Os testes com Spring usam o banco separado `estoque_test_db`. Não é necessário iniciar a API antes.
+
+Para executar apenas os testes unitários, sem banco:
 
 ```powershell
 .\mvnw.cmd "-Dtest=ProdutoTest,PedidoTest" test
 ```
 
-Esses testes não dependem do PostgreSQL. O comando executa apenas as duas classes; a suíte completa ainda não foi validada para rodar sem banco.
-
-Os fluxos da API foram verificados manualmente, incluindo preservação do saldo e histórico em operações recusadas. Testes automatizados de integração e concorrência ainda estão pendentes.
-
 ## Próximas etapas
 
-- Autenticação e controle de acesso.
-- Consulta de estoque baixo e paginação das listagens.
-- Testes de integração, concorrência e falhas durante transações.
-- Integração contínua com GitHub Actions.
+- Testes de endpoints e concorrência.
+- Automação dos testes no GitHub Actions.
+- Autenticação, consulta de estoque baixo e paginação.
 - Publicação da API.
 
 ## Autor
 
 **Guilherme Tonelli**
 
-[GitHub](https://github.com/Guilherme-Tonellidev) 
+[GitHub](https://github.com/Guilherme-Tonellidev)
 [LinkedIn](https://www.linkedin.com/in/guilherme-tonellidev)
