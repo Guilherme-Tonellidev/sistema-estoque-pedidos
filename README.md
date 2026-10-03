@@ -78,9 +78,10 @@ Escolha uma opção para cadastrar produtos, registrar entradas e saídas, criar
 
 ## Testes
 
-A suíte possui **24 testes aprovados localmente**:
+A suíte possui **46 testes aprovados localmente.**:
 
 - **19 unitários:** regras de produtos e pedidos.
+- **22 da camada HTTP:** 5 de produtos, 7 de pedidos e 10 de estoque, cobrindo validações e respostas de sucesso e erro, com serviços simulados.
 - **4 de integração:** confirmação, estoque insuficiente, devolução e cancelamento repetido.
 - **1 de inicialização:** contexto Spring.
 
