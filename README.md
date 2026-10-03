@@ -100,7 +100,7 @@ Para executar apenas os testes unitários, sem banco:
 
 ## Próximas etapas
 
-- Testes de endpoints e concorrência.
+- Ampliar os testes de endpoints e adicionar testes de concorrência.
 - Autenticação, consulta de estoque baixo e paginação.
 - Publicação da API.
 
