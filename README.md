@@ -101,7 +101,6 @@ Para executar apenas os testes unitários, sem banco:
 ## Próximas etapas
 
 - Testes de endpoints e concorrência.
-- Automação dos testes no GitHub Actions.
 - Autenticação, consulta de estoque baixo e paginação.
 - Publicação da API.
 
