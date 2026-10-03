@@ -1,0 +1,52 @@
+name: Testes da API
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    name: Java 21 e PostgreSQL 17
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: estoque_test_db
+          POSTGRES_USER: estoque_app
+          POSTGRES_PASSWORD: senha_apenas_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U estoque_app -d estoque_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ESTOQUE_DB_PASSWORD: senha_apenas_ci
+      SPRING_PROFILES_ACTIVE: test
+
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Executar todos os testes
+        run: bash ./mvnw --batch-mode --no-transfer-progress test
