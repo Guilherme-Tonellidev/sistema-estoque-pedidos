@@ -13,6 +13,7 @@ Java 21 · Spring Boot · Spring Data JPA · Jakarta Validation · PostgreSQL 17
 - Bloqueio de quantidades inválidas e estoque insuficiente.
 - Pedidos com itens, preços registrados e total calculado.
 - Confirmação e cancelamento com atualização do estoque.
+- Controle de concorrência com bloqueio pessimista: confirmações e saídas simultâneas não geram saldo negativo nem desconto duplicado.
 
 Produtos começam com estoque zero. Pedidos começam em `RASCUNHO`; a confirmação desconta os itens do estoque. Cancelar um pedido confirmado devolve os itens; cancelar um rascunho não altera o saldo. Confirmações e cancelamentos repetidos são recusados.
 
@@ -78,12 +79,13 @@ Escolha uma opção para cadastrar produtos, registrar entradas e saídas, criar
 
 ## Testes
 
-A suíte possui **46 testes aprovados localmente.**:
+A suíte possui **51 testes aprovados localmente**:
 
 - **19 unitários:** regras de produtos e pedidos.
 - **22 da camada HTTP:** 5 de produtos, 7 de pedidos e 10 de estoque, cobrindo validações e respostas de sucesso e erro, com serviços simulados.
 - **4 de integração:** confirmação, estoque insuficiente, devolução e cancelamento repetido.
 - **1 de inicialização:** contexto Spring.
+- **5 de concorrência:** disputa pelo mesmo estoque, saídas simultâneas, confirmação repetida do mesmo pedido, pedidos com produtos em ordem oposta (sem deadlock) e confirmação e cancelamento simultâneos.
 
 Com o PostgreSQL ligado e a variável `ESTOQUE_DB_PASSWORD` definida no terminal:
 
@@ -101,7 +103,7 @@ Para executar apenas os testes unitários, sem banco:
 
 ## Próximas etapas
 
-- Ampliar os testes de endpoints e adicionar testes de concorrência.
+- Ampliar os testes de endpoints.
 - Autenticação, consulta de estoque baixo e paginação.
 - Publicação da API.
 
