@@ -4,7 +4,7 @@ API REST de portfólio para cadastrar produtos, controlar estoque e gerenciar pe
 
 ## Tecnologias
 
-Java 21 · Spring Boot · Spring Data JPA · Jakarta Validation · PostgreSQL 17 · Flyway · Swagger/OpenAPI · Maven Wrapper · JUnit 5
+Java 21 · Spring Boot · Spring Data JPA · Jakarta Validation · PostgreSQL 17 · Flyway · Swagger/OpenAPI · Maven Wrapper · JUnit 5 · Python · Textual · httpx
 
 ## Funcionalidades
 
@@ -65,6 +65,20 @@ $env:ESTOQUE_DB_PASSWORD = [System.Net.NetworkCredential]::new("", $senhaEstoque
 
 A API fica disponível em `http://localhost:8081`. Informe a senha novamente ao abrir outro terminal; não a salve no repositório. Para encerrar a API, use `Ctrl + C`.
 
+### 4. Interface em terminal (opcional)
+
+Com a API ligada, abra outro PowerShell na pasta do projeto e execute:
+
+```powershell
+cd tui
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python painel.py
+```
+
+A interface se conecta à API em `http://localhost:8081`. Ela não acessa o banco diretamente.
+
 ## Usar a aplicação
 
 **Menu:** com a API ligada, abra outro PowerShell na pasta do projeto e execute:
@@ -74,6 +88,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\menu.ps1
 ```
 
 Escolha uma opção para cadastrar produtos, registrar entradas e saídas, criar, confirmar ou cancelar pedidos e consultar os dados. As operações ficam salvas no banco da aplicação. O cancelamento de pedidos não desfaz saídas manuais.
+
+**Interface em terminal:** o `painel.py` reúne as telas de produtos e pedidos. Na tela de produtos, é possível cadastrar, registrar entradas e saídas com motivo e consultar o histórico. O botão **Pedidos** abre a lista, onde é possível criar rascunhos, confirmar, cancelar e acompanhar o status de cada pedido. Use as setas para selecionar, `Tab` para os botões, `Esc` para voltar, `F5` para atualizar e `Ctrl+Q` para sair.
 
 **Swagger:** acesse a [documentação interativa](http://localhost:8081/swagger-ui.html) para consultar os endpoints e enviar requisições. Selecione uma operação, clique em **Try it out** e depois em **Execute**.
 
