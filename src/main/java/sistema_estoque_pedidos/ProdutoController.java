@@ -39,6 +39,11 @@ public class ProdutoController {
         return service.listar();
     }
 
+    @GetMapping("/estoque-baixo")
+    public List<Produto> listarEstoqueBaixo() {
+        return service.listarEstoqueBaixo();
+    }
+
     @GetMapping("/{id}")
     public Produto buscarPorId(@PathVariable("id") Long id) {
         return service.buscarPorId(id);

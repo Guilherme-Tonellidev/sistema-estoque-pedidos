@@ -88,6 +88,24 @@ abstract class ConcorrenciaTestBase {
         return salvo.getId();
     }
 
+    protected Long criarProduto(int quantidade, int estoqueMinimo) {
+        Produto produto = new Produto(
+                "CONC-" + UUID.randomUUID(),
+                "Produto de teste",
+                new BigDecimal("10.00"),
+                estoqueMinimo);
+
+        // Saldo inicial sem gerar histórico; zero não passa por registrarEntrada.
+        if (quantidade > 0) {
+            produto.registrarEntrada(quantidade);
+        }
+
+        Produto salvo = produtoRepository.saveAndFlush(produto);
+        produtosCriados.add(salvo.getId());
+
+        return salvo.getId();
+    }
+
     protected int saldo(Long produtoId) {
         return jdbc.queryForObject(
                 "SELECT quantidade_estoque FROM produtos WHERE id = ?",

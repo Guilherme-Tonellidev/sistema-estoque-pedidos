@@ -48,6 +48,11 @@ public class ProdutoService {
     }
 
     @Transactional(readOnly = true)
+    public List<Produto> listarEstoqueBaixo() {
+        return repository.buscarComEstoqueBaixo();
+    }
+
+    @Transactional(readOnly = true)
     public Produto buscarPorId(Long id) {
         return repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(

@@ -1,5 +1,6 @@
 package sistema_estoque_pedidos;
 
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
@@ -16,4 +17,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Produto p where p.id = :id")
     Optional<Produto> buscarParaAtualizarEstoque(@Param("id") Long id);
+
+    @Query("select p from Produto p where p.quantidadeEstoque <= p.estoqueMinimo order by p.id")
+    List<Produto> buscarComEstoqueBaixo();
 }

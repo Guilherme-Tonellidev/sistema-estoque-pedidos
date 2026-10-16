@@ -79,13 +79,14 @@ Escolha uma opção para cadastrar produtos, registrar entradas e saídas, criar
 
 ## Testes
 
-A suíte possui **51 testes aprovados localmente**:
+A suíte possui **53 testes aprovados localmente**:
 
 - **19 unitários:** regras de produtos e pedidos.
 - **22 da camada HTTP:** 5 de produtos, 7 de pedidos e 10 de estoque, cobrindo validações e respostas de sucesso e erro, com serviços simulados.
 - **4 de integração:** confirmação, estoque insuficiente, devolução e cancelamento repetido.
 - **1 de inicialização:** contexto Spring.
 - **5 de concorrência:** disputa pelo mesmo estoque, saídas simultâneas, confirmação repetida do mesmo pedido, pedidos com produtos em ordem oposta (sem deadlock) e confirmação e cancelamento simultâneos.
+- **2 de estoque baixo:** inclusão de produtos no limite e ordenação por id.
 
 Com o PostgreSQL ligado e a variável `ESTOQUE_DB_PASSWORD` definida no terminal:
 
@@ -104,7 +105,7 @@ Para executar apenas os testes unitários, sem banco:
 ## Próximas etapas
 
 - Ampliar os testes de endpoints.
-- Autenticação, consulta de estoque baixo e paginação.
+- Autenticação e paginação.
 - Publicação da API.
 
 ## Autor
