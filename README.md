@@ -1,27 +1,55 @@
 # API de Estoque e Pedidos
 
-API REST de portfólio para cadastrar produtos, controlar estoque e gerenciar pedidos. Desenvolvida por **Guilherme Tonelli**, com foco em back-end e um menu PowerShell para utilizar a API pelo terminal.
+API REST para cadastrar produtos, controlar estoque e gerenciar pedidos. Projeto de portfólio com foco em back-end: regras de negócio em transação, controle de concorrência, autenticação JWT e três formas de uso (Swagger, menu PowerShell e interface em terminal).
 
-## Tecnologias
+**Stack:** Java 21 · Spring Boot 4 · Spring Data JPA · Spring Security (JWT) · PostgreSQL 17 · Flyway · Jakarta Validation · Swagger/OpenAPI · JUnit 5. Clientes em Python (Textual, httpx) e PowerShell.
 
-Java 21 · Spring Boot · Spring Data JPA · Jakarta Validation · PostgreSQL 17 · Flyway · Swagger/OpenAPI · Maven Wrapper · JUnit 5 · Python · Textual · httpx
+## Arquitetura
 
-## Funcionalidades
+O código segue três camadas. O `Controller` recebe a requisição e valida a entrada. O `Service` aplica as regras de negócio e controla a transação. O `Repository` acessa o banco.
 
-- Cadastro e consulta de produtos com código único, preço e estoque mínimo.
-- Entradas e saídas com motivo e histórico dos 50 registros mais recentes.
-- Bloqueio de quantidades inválidas e estoque insuficiente.
-- Pedidos com itens, preços registrados e total calculado.
-- Confirmação e cancelamento com atualização do estoque.
-- Controle de concorrência com bloqueio pessimista: confirmações e saídas simultâneas não geram saldo negativo nem desconto duplicado.
+Erros de regra viram `ResponseStatusException` e são padronizados pelo `TratadorDeErros`. Todas as respostas de erro, inclusive 401 e 403, seguem o formato `{ "status", "erro", "caminho" }`.
 
-Produtos começam com estoque zero. Pedidos começam em `RASCUNHO`; a confirmação desconta os itens do estoque. Cancelar um pedido confirmado devolve os itens; cancelar um rascunho não altera o saldo. Confirmações e cancelamentos repetidos são recusados.
+O schema é versionado com Flyway em `src/main/resources/db/migration`. O Hibernate só valida o schema (`ddl-auto=validate`), sem alterá-lo.
 
-As alterações de pedido, saldo e histórico são realizadas em transações.
+## Regras de negócio
 
-## Executar
+- Produtos começam com estoque zero. Toda mudança de saldo gera uma movimentação com saldo anterior e posterior, o que permite auditar o histórico.
+- Pedidos nascem como `RASCUNHO` e não alteram o estoque.
+- Confirmar um pedido verifica o saldo de todos os itens antes de descontar qualquer um. Se um item não tem saldo, nada é alterado.
+- Cancelar um pedido confirmado devolve os itens. Cancelar um rascunho não movimenta o estoque.
+- Confirmar ou cancelar duas vezes é recusado.
+- O preço do item é registrado no pedido, então alterações futuras no produto não afetam pedidos antigos.
 
-Requisitos: **JDK 21**, **PostgreSQL em execução** e **Git**. Os comandos são para PowerShell no Windows.
+## Decisões técnicas
+
+**Concorrência.** Saídas e confirmações bloqueiam o produto com `PESSIMISTIC_WRITE`. Assim, dois pedidos disputando o mesmo estoque não geram saldo negativo nem desconto duplicado. Os produtos de um pedido são bloqueados em ordem de id, o que evita deadlock quando dois pedidos têm itens em ordem diferente.
+
+**Autenticação.** `POST /auth/login` devolve um token JWT assinado com HMAC-SHA256. As senhas ficam como hash BCrypt. Todas as rotas exigem o cabeçalho `Authorization: Bearer <token>`, exceto o login e o Swagger. A validade do token é definida em `estoque.jwt.validade-horas`.
+
+**Administrador inicial.** Ao subir a API com a tabela `usuarios` vazia, o usuário administrador é criado a partir de `ESTOQUE_ADMIN_USUARIO` e `ESTOQUE_ADMIN_SENHA`.
+
+## Endpoints
+
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/auth/login` | Gera o token |
+| GET | `/produtos` | Lista produtos |
+| POST | `/produtos` | Cadastra produto |
+| GET | `/produtos/estoque-baixo` | Produtos no limite mínimo ou abaixo dele |
+| GET | `/produtos/{id}` | Consulta produto |
+| POST | `/produtos/{id}/entradas` | Registra entrada |
+| POST | `/produtos/{id}/saidas` | Registra saída |
+| GET | `/produtos/{id}/movimentacoes` | Últimas 50 movimentações |
+| POST | `/pedidos` | Cria pedido em rascunho |
+| GET | `/pedidos` | Lista pedidos |
+| GET | `/pedidos/{id}` | Consulta pedido |
+| PATCH | `/pedidos/{id}/confirmacao` | Confirma e desconta o estoque |
+| PATCH | `/pedidos/{id}/cancelamento` | Cancela e devolve os itens, se estava confirmado |
+
+## Como executar
+
+**Requisitos:** JDK 21, PostgreSQL em execução e Git. Os comandos são para PowerShell no Windows.
 
 ### 1. Clonar o projeto
 
@@ -30,44 +58,50 @@ git clone https://github.com/Guilherme-Tonellidev/sistema-estoque-pedidos.git
 cd sistema-estoque-pedidos
 ```
 
-### 2. Preparar os bancos
+### 2. Preparar o banco
 
-No SQL Shell (`psql`), conectado como administrador, execute uma vez:
+No `psql`, conectado como administrador, execute uma vez:
 
 ```sql
 CREATE ROLE estoque_app LOGIN;
-```
-
-Defina a senha:
-
-```text
-\password estoque_app
-```
-
-Crie os bancos da aplicação e dos testes:
-
-```sql
 CREATE DATABASE estoque_db OWNER estoque_app;
 CREATE DATABASE estoque_test_db OWNER estoque_app;
 ```
 
-Se já existirem, utilize-os. A configuração considera o PostgreSQL em `localhost:5432`. O Flyway cria as tabelas automaticamente.
+Defina a senha do usuário com `\password estoque_app`. Se os bancos já existirem, use-os. A aplicação conecta em `localhost:5432`, e o Flyway cria as tabelas automaticamente.
 
-### 3. Iniciar a API
-
-Dentro da pasta do projeto:
+### 3. Subir a API
 
 ```powershell
 $senhaEstoque = Read-Host "Senha do estoque_app" -AsSecureString
 $env:ESTOQUE_DB_PASSWORD = [System.Net.NetworkCredential]::new("", $senhaEstoque).Password
+
+$env:ESTOQUE_JWT_SECRET = -join ((48..57 + 65..90 + 97..122) | Get-Random -Count 48 | ForEach-Object { [char]$_ })
+
+$env:ESTOQUE_ADMIN_USUARIO = "admin"
+$senhaAdmin = Read-Host "Senha do admin" -AsSecureString
+$env:ESTOQUE_ADMIN_SENHA = [System.Net.NetworkCredential]::new("", $senhaAdmin).Password
+
 .\mvnw.cmd spring-boot:run
 ```
 
-A API fica disponível em `http://localhost:8081`. Informe a senha novamente ao abrir outro terminal; não a salve no repositório. Para encerrar a API, use `Ctrl + C`.
+A API fica disponível em `http://localhost:8081`. As variáveis precisam ser definidas em cada terminal novo. O segredo JWT muda a cada execução, então tokens gerados antes deixam de valer. Não grave senhas nem o segredo no repositório. Depois da primeira execução, o administrador já existe e as variáveis `ESTOQUE_ADMIN_*` deixam de ser necessárias.
 
-### 4. Interface em terminal (opcional)
+Para encerrar a API, use `Ctrl + C`.
 
-Com a API ligada, abra outro PowerShell na pasta do projeto e execute:
+### 4. Usar os clientes
+
+**Swagger:** `http://localhost:8081/swagger-ui.html` documenta todos os endpoints. Para as rotas protegidas, envie o token no cabeçalho `Authorization`.
+
+**Menu PowerShell:** com a API ligada, abra outro PowerShell na pasta do projeto:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\menu.ps1
+```
+
+O menu pede usuário e senha ao abrir e pede o login de novo quando a sessão expira.
+
+**Interface em terminal:** requer Python 3.13 (versão usada no desenvolvimento).
 
 ```powershell
 cd tui
@@ -77,42 +111,27 @@ pip install -r requirements.txt
 python painel.py
 ```
 
-A interface se conecta à API em `http://localhost:8081`. Ela não acessa o banco diretamente.
-
-## Usar a aplicação
-
-**Menu:** com a API ligada, abra outro PowerShell na pasta do projeto e execute:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\menu.ps1
-```
-
-Escolha uma opção para cadastrar produtos, registrar entradas e saídas, criar, confirmar ou cancelar pedidos e consultar os dados. As operações ficam salvas no banco da aplicação. O cancelamento de pedidos não desfaz saídas manuais.
-
-**Interface em terminal:** o `painel.py` reúne as telas de produtos e pedidos. Na tela de produtos, é possível cadastrar, registrar entradas e saídas com motivo e consultar o histórico. O botão **Pedidos** abre a lista, onde é possível criar rascunhos, confirmar, cancelar e acompanhar o status de cada pedido. Use as setas para selecionar, `Tab` para os botões, `Esc` para voltar, `F5` para atualizar e `Ctrl+Q` para sair.
-
-**Swagger:** acesse a [documentação interativa](http://localhost:8081/swagger-ui.html) para consultar os endpoints e enviar requisições. Selecione uma operação, clique em **Try it out** e depois em **Execute**.
+A interface também pede login ao abrir. Use as setas para selecionar, `Tab` para os botões, `Esc` para voltar, `F5` para atualizar e `Ctrl+Q` para sair. Ela consome a API e não acessa o banco diretamente.
 
 ## Testes
 
-A suíte possui **53 testes aprovados localmente**:
-
-- **19 unitários:** regras de produtos e pedidos.
-- **22 da camada HTTP:** 5 de produtos, 7 de pedidos e 10 de estoque, cobrindo validações e respostas de sucesso e erro, com serviços simulados.
-- **4 de integração:** confirmação, estoque insuficiente, devolução e cancelamento repetido.
-- **1 de inicialização:** contexto Spring.
-- **5 de concorrência:** disputa pelo mesmo estoque, saídas simultâneas, confirmação repetida do mesmo pedido, pedidos com produtos em ordem oposta (sem deadlock) e confirmação e cancelamento simultâneos.
-- **2 de estoque baixo:** inclusão de produtos no limite e ordenação por id.
-
-Com o PostgreSQL ligado e a variável `ESTOQUE_DB_PASSWORD` definida no terminal:
+Com o PostgreSQL ligado e `ESTOQUE_DB_PASSWORD` definida no terminal:
 
 ```powershell
 .\mvnw.cmd test
 ```
 
-Os testes com Spring usam o banco separado `estoque_test_db`. Não é necessário iniciar a API antes.
+Os testes com Spring usam o banco `estoque_test_db` e o perfil `test`. Não é preciso subir a API antes. São **57 testes**:
 
-Para executar apenas os testes unitários, sem banco:
+- 19 unitários de regras de produtos e pedidos
+- 22 da camada HTTP, com serviços simulados
+- 4 de integração de pedidos
+- 1 de contexto Spring
+- 5 de concorrência
+- 2 de estoque baixo
+- 4 de segurança
+
+Para rodar só os unitários, sem banco:
 
 ```powershell
 .\mvnw.cmd "-Dtest=ProdutoTest,PedidoTest" test
@@ -121,12 +140,11 @@ Para executar apenas os testes unitários, sem banco:
 ## Próximas etapas
 
 - Ampliar os testes de endpoints.
-- Autenticação e paginação.
+- Paginação nas listagens.
 - Publicação da API.
 
 ## Autor
 
-**Guilherme Tonelli**
-
-[GitHub](https://github.com/Guilherme-Tonellidev)
-[LinkedIn](https://www.linkedin.com/in/guilherme-tonellidev)
+**Guilherme Tonelli** 
+· [GitHub](https://github.com/Guilherme-Tonellidev) 
+· [LinkedIn](https://www.linkedin.com/in/guilherme-tonellidev)
