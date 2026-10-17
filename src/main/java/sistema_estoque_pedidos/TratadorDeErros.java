@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -70,6 +72,28 @@ public class TratadorDeErros {
         return responder(
                 400,
                 "O parâmetro informado possui um formato inválido.",
+                request);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErroResposta> tratarNaoAutenticado(
+            AuthenticationException exception,
+            HttpServletRequest request) {
+
+        return responder(
+                401,
+                "Faça login para acessar este recurso.",
+                request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErroResposta> tratarAcessoNegado(
+            AccessDeniedException exception,
+            HttpServletRequest request) {
+
+        return responder(
+                403,
+                "Você não tem permissão para realizar esta operação.",
                 request);
     }
 
