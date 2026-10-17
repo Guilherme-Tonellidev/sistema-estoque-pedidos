@@ -6,7 +6,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Input, Select, Static
 
-from app import chamar_api, inteiro
+from app import chamar_api, data_local, inteiro
 
 
 def dinheiro(valor):
@@ -381,9 +381,9 @@ class DetalhePedido(TelaPedido):
             f"Cliente: {pedido['cliente']}\n"
             f"Status: {pedido['status']}\n"
             f"Total: {dinheiro(pedido['total'])}\n"
-            f"Criação: {pedido['dataCriacao']}\n"
-            f"Confirmação: {pedido.get('dataConfirmacao') or '—'}\n"
-            f"Cancelamento: {pedido.get('dataCancelamento') or '—'}"
+            f"Criação: {data_local(pedido['dataCriacao'])}\n"
+            f"Confirmação: {data_local(pedido.get('dataConfirmacao'))}\n"
+            f"Cancelamento: {data_local(pedido.get('dataCancelamento'))}"
         )
 
         tabela = self.query_one("#itens-detalhes", DataTable)

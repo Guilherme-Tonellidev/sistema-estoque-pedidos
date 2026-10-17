@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -52,6 +53,33 @@ def inteiro(texto, minimo):
 
     return numero
 
+def data_local(valor):
+    if not valor:
+        return "—"
+
+    texto = str(valor).replace("Z", "+00:00")
+
+    # Limita a fração de segundos a 6 dígitos, que é o que o Python aceita.
+    if "." in texto:
+        inicio, resto = texto.split(".", 1)
+        digitos = ""
+
+        for caractere in resto:
+            if not caractere.isdigit():
+                break
+            digitos += caractere
+
+        texto = f"{inicio}.{digitos[:6]}{resto[len(digitos):]}"
+
+    try:
+        momento = datetime.fromisoformat(texto)
+    except ValueError:
+        return str(valor)
+
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=timezone.utc)
+
+    return momento.astimezone().strftime("%d/%m/%Y %H:%M:%S")
 
 class Formulario(ModalScreen):
     BINDINGS = [("escape", "voltar", "Voltar")]
@@ -300,7 +328,7 @@ class Historico(ModalScreen):
                 str(movimentacao["saldoAnterior"]),
                 str(movimentacao["saldoPosterior"]),
                 Text(movimentacao["motivo"]),
-                Text(movimentacao["dataMovimentacao"]),
+                Text(data_local(movimentacao["dataMovimentacao"])),
             )
 
         status.update(

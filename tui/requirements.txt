@@ -1,2 +1,2 @@
-textual
-httpx
+textual==8.2.8
+httpx==0.28.1
