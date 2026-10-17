@@ -1,4 +1,5 @@
 $api = "http://localhost:8081"
+$script:token = $null
 
 function Ler-Texto {
     param([string]$Mensagem)
@@ -61,6 +62,39 @@ function Ler-Preco {
     }
 }
 
+function Obter-MensagemApi {
+    param($Erro)
+
+    # No Windows PowerShell 5.1 o corpo do erro pode nao vir em ErrorDetails,
+    # entao ele tambem e lido direto da resposta.
+    $corpo = $null
+
+    if ($Erro.ErrorDetails -and $Erro.ErrorDetails.Message) {
+        $corpo = $Erro.ErrorDetails.Message
+    }
+
+    if (-not $corpo -and $Erro.Exception.Response) {
+        try {
+            $leitor = New-Object System.IO.StreamReader(
+                $Erro.Exception.Response.GetResponseStream())
+            $corpo = $leitor.ReadToEnd()
+        } catch {
+            $corpo = $null
+        }
+    }
+
+    if (-not $corpo) {
+        return $null
+    }
+
+    try {
+        $erroApi = $corpo | ConvertFrom-Json
+        return $erroApi.erro
+    } catch {
+        return $null
+    }
+}
+
 function Chamar-Api {
     param(
         [string]$Metodo,
@@ -75,13 +109,75 @@ function Chamar-Api {
         TimeoutSec  = 30
     }
 
+    if ($script:token) {
+        $parametros.Headers = @{
+            Authorization = "Bearer $($script:token)"
+        }
+    }
+
     if ($null -ne $Dados) {
         $json = ConvertTo-Json -InputObject $Dados -Depth 10
         $parametros.ContentType = "application/json; charset=utf-8"
         $parametros.Body = [System.Text.Encoding]::UTF8.GetBytes($json)
     }
 
-    Invoke-RestMethod @parametros
+    try {
+        return Invoke-RestMethod @parametros
+    } catch {
+        $status = 0
+
+        if ($_.Exception.Response) {
+            $status = [int]$_.Exception.Response.StatusCode
+        }
+
+        if ($status -eq 0) {
+            throw "Falha de conexao. Confira se a API esta ligada. Se estava gravando, consulte os dados antes de repetir."
+        }
+
+        # Sessao expirada: o login e pedido de novo antes do menu.
+        # A operacao nao e repetida automaticamente, para nao gravar duas vezes.
+        if ($status -eq 401 -and $Rota -ne "/auth/login") {
+            $script:token = $null
+            throw "Sua sessao expirou. Faca login novamente."
+        }
+
+        $mensagem = Obter-MensagemApi $_
+
+        if (-not $mensagem) {
+            $mensagem = "A API retornou HTTP $status."
+        }
+
+        throw $mensagem
+    }
+}
+
+function Fazer-Login {
+    Clear-Host
+
+    Write-Host "===================================="
+    Write-Host "       ENTRAR NO ESTOQUE"
+    Write-Host "===================================="
+    Write-Host ""
+
+    while ($true) {
+        $usuario = Ler-Texto "Usuario"
+        $senhaSegura = Read-Host "Senha" -AsSecureString
+        $senha = [System.Net.NetworkCredential]::new("", $senhaSegura).Password
+
+        try {
+            $resposta = Chamar-Api -Metodo Post -Rota "/auth/login" `
+                -Dados @{ usuario = $usuario; senha = $senha }
+
+            $script:token = $resposta.token
+            Write-Host "Login realizado." -ForegroundColor Green
+            Start-Sleep -Seconds 1
+            return
+        } catch {
+            Write-Host "Nao foi possivel entrar: $($_.Exception.Message)" `
+                -ForegroundColor Red
+            Write-Host ""
+        }
+    }
 }
 
 function Mostrar-Resultado {
@@ -117,6 +213,10 @@ function Mostrar-Saldo {
 }
 
 while ($true) {
+    if (-not $script:token) {
+        Fazer-Login
+    }
+
     Clear-Host
 
     Write-Host "===================================="
@@ -216,7 +316,7 @@ while ($true) {
                     $quantidade = Ler-Inteiro "Quantidade"
 
                     $itens += @{
-                        produtoId = $produtoId
+                        produtoId  = $produtoId
                         quantidade = $quantidade
                     }
 
@@ -302,25 +402,9 @@ while ($true) {
             }
         }
     } catch {
-        $mensagem = $_.Exception.Message
-
-        if ($_.ErrorDetails.Message) {
-            try {
-                $erroApi = $_.ErrorDetails.Message | ConvertFrom-Json
-
-                if ($erroApi.erro) {
-                    $mensagem = $erroApi.erro
-                }
-            } catch {
-                # Mantem a mensagem original se a resposta nao for JSON.
-            }
-        }
-
         Write-Host ""
-        Write-Host "Nao foi possivel concluir: $mensagem" `
+        Write-Host "Nao foi possivel concluir: $($_.Exception.Message)" `
             -ForegroundColor Red
-        Write-Host "Se houve falha de conexao, confira se a API esta ligada."
-        Write-Host "Consulte os dados antes de repetir uma operacao."
     }
 
     Write-Host ""
