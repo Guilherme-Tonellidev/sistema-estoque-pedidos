@@ -12,18 +12,36 @@ from textual.widgets import Button, DataTable, Footer, Header, Input, Static
 
 API = "http://localhost:8081"
 
+class SessaoExpirada(ValueError):
+    pass
+
+# Guarda o token da sessão atual. Fica só na memória do programa.
+sessao = {"token": None}
 
 async def chamar_api(metodo, rota, dados=None):
+    cabecalhos = {}
+
+    if sessao["token"]:
+        cabecalhos["Authorization"] = f"Bearer {sessao['token']}"
+
     try:
         async with httpx.AsyncClient(timeout=15, trust_env=False) as cliente:
             resposta = await cliente.request(
-                metodo, f"{API}{rota}", json=dados
+                metodo,
+                f"{API}{rota}",
+                json=dados,
+                headers=cabecalhos,
             )
     except httpx.RequestError as erro:
         raise ValueError(
             "Falha de conexão. Confira se a API está ligada. "
             "Se estava gravando, consulte os dados antes de repetir."
         ) from erro
+
+    # Um 401 fora do login significa que a sessão não vale mais.
+    if resposta.status_code == 401 and not rota.startswith("/auth/"):
+        sessao["token"] = None
+        raise SessaoExpirada("Sua sessão expirou. Faça login novamente.")
 
     if not resposta.is_success:
         mensagem = f"A API retornou HTTP {resposta.status_code}."
@@ -345,6 +363,91 @@ class Historico(ModalScreen):
         if evento.button.id == "fechar-historico":
             self.action_voltar()
 
+class TelaLogin(ModalScreen):
+    DEFAULT_CSS = """
+    TelaLogin {
+        align: center middle;
+        background: $background 80%;
+    }
+
+    #janela-login {
+        width: 60;
+        max-width: 95%;
+        height: auto;
+        padding: 1 2;
+        border: round #65baff;
+        background: #182438;
+    }
+
+    #erro-login {
+        height: auto;
+        color: #ffbf69;
+        margin-top: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="janela-login"):
+            yield Static("ENTRAR NO ESTOQUE", classes="titulo")
+
+            yield Static("Usuário")
+            yield Input(id="usuario-login", max_length=50)
+
+            yield Static("Senha")
+            yield Input(id="senha-login", password=True)
+
+            yield Static("", id="erro-login", markup=False)
+
+            with Horizontal(classes="botoes"):
+                yield Button("Entrar", id="entrar", variant="primary")
+                yield Button("Sair", id="sair-login")
+
+    def on_mount(self):
+        self.query_one("#usuario-login", Input).focus()
+
+    def on_input_submitted(self, evento: Input.Submitted):
+        evento.stop()
+
+        if evento.input.id == "senha-login":
+            self.tentar_entrar()
+
+    def on_button_pressed(self, evento: Button.Pressed):
+        evento.stop()
+
+        if evento.button.id == "entrar":
+            self.tentar_entrar()
+        elif evento.button.id == "sair-login":
+            self.app.exit()
+
+    def bloquear(self, valor):
+        for botao in self.query(Button):
+            botao.disabled = valor
+
+    @work(exclusive=True)
+    async def tentar_entrar(self):
+        erro = self.query_one("#erro-login", Static)
+        usuario = self.query_one("#usuario-login", Input).value.strip()
+        senha = self.query_one("#senha-login", Input).value
+
+        if not usuario or not senha:
+            erro.update("Informe o usuário e a senha.")
+            return
+
+        self.bloquear(True)
+        erro.update("Entrando...")
+
+        try:
+            resposta = await chamar_api(
+                "POST",
+                "/auth/login",
+                {"usuario": usuario, "senha": senha},
+            )
+        except ValueError as problema:
+            erro.update(str(problema))
+            self.bloquear(False)
+        else:
+            sessao["token"] = resposta["token"]
+            self.dismiss(True)
 
 class EstoqueApp(App):
     TITLE = "Estoque e Pedidos"
@@ -452,7 +555,10 @@ class EstoqueApp(App):
         )
 
         tabela.focus()
-        self.carregar()
+        self.pedir_login(self.carregar)
+
+    def pedir_login(self, depois):
+        self.push_screen(TelaLogin(), lambda _ok: depois())
 
     @work(exclusive=True)
     async def carregar(self):
@@ -466,6 +572,9 @@ class EstoqueApp(App):
 
         try:
             produtos = await chamar_api("GET", "/produtos")
+        except SessaoExpirada:
+            resumo.update("Sessão expirada. Faça login novamente.")
+            self.pedir_login(self.carregar)
         except ValueError as problema:
             resumo.update(str(problema))
         else:
