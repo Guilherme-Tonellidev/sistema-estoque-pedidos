@@ -137,12 +137,6 @@ Para rodar só os unitários, sem banco:
 .\mvnw.cmd "-Dtest=ProdutoTest,PedidoTest" test
 ```
 
-## Próximas etapas
-
-- Ampliar os testes de endpoints.
-- Paginação nas listagens.
-- Publicação da API.
-
 ## Autor
 
 **Guilherme Tonelli** 
